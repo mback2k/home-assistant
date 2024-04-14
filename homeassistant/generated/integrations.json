@@ -191,6 +191,12 @@
       "config_flow": false,
       "iot_class": "local_push"
     },
+    "alexa_endpoint": {
+      "name": "Amazon Alexa Endpoint",
+      "integration_type": "hub",
+      "config_flow": true,
+      "iot_class": "cloud_push"
+    },
     "alpha_vantage": {
       "name": "Alpha Vantage",
       "integration_type": "hub",

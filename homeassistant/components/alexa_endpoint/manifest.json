@@ -1,0 +1,21 @@
+{
+  "domain": "alexa_endpoint",
+  "name": "Amazon Alexa Endpoint",
+  "after_dependencies": [
+    "alexa",
+    "cloud"
+  ],
+  "codeowners": [
+    "@mback2k"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
+  "documentation": "https://www.home-assistant.io/integrations/alexa",
+  "iot_class": "cloud_push",
+  "requirements": [
+    "httpx[http2]==0.27.0"
+  ],
+  "single_config_entry": true
+}

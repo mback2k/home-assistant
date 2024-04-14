@@ -40,6 +40,7 @@ FLOWS = {
         "airzone_cloud",
         "aladdin_connect",
         "alarmdecoder",
+        "alexa_endpoint",
         "amberelectric",
         "ambiclimate",
         "ambient_station",
