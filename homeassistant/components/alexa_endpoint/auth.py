@@ -1,4 +1,5 @@
 """Support for Alexa codepair auth."""
+
 import asyncio
 from asyncio import timeout
 from datetime import timedelta
@@ -9,17 +10,25 @@ import logging
 import aiohttp
 
 from homeassistant.components.alexa.auth import Auth
+from homeassistant.components.alexa.const import STORAGE_REFRESH_TOKEN
 from homeassistant.components.alexa.diagnostics import async_redact_lwa_params
-from homeassistant.const import CONF_CLIENT_ID
+from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
+
+from .const import AVS_SCOPE
 
 _LOGGER = logging.getLogger(__name__)
 
 LWA_CODEPAIR_URI = "https://api.amazon.com/auth/o2/create/codepair"
 
+STORAGE_KEY = "alexa_endpoint_codeauth"
+STORAGE_VERSION = 1
 
-class CodeAuthResult(object):
+
+class CodeAuthResult:
     def __init__(self, response_json: dict):
         self.user_code: str = response_json["user_code"]
         self.device_code: str = response_json["device_code"]
@@ -30,14 +39,48 @@ class CodeAuthResult(object):
 
 
 class CodeAuth(Auth):
-    async def async_init_device_auth(
-        self, scope: str, scope_data: dict | None
-    ) -> CodeAuthResult | None:
+    """Handle authentication to connect to Alexa Voice Service."""
+
+    def __init__(
+        self, hass: HomeAssistant, client_id: str, product_id: str, device_sn: str
+    ) -> None:
+        """Initialize the CodeAuth class."""
+        super().__init__(hass, client_id, None)
+        self.product_id: str = product_id
+        self.device_sn: str = device_sn
+        self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}::{client_id}")
+        self._scope = AVS_SCOPE
+        self._scope_data = {
+            self._scope: {
+                "productID": product_id,
+                "productInstanceAttributes": {
+                    "deviceSerialNumber": device_sn,
+                },
+            },
+        }
+
+    @callback
+    def unique_id(self) -> str:
+        """EndpointId for connected endpoint."""
+        return f"{self.client_id}::{self.product_id}::{self.device_sn}"
+
+    @callback
+    def async_invalidate_refresh_token(self) -> None:
+        """Invalidate refresh token."""
+        assert self._prefs is not None
+        self._prefs[STORAGE_REFRESH_TOKEN] = None
+
+    async def _async_request_new_token(self, lwa_params: dict[str, str]) -> str | None:
+        if CONF_CLIENT_SECRET in lwa_params:
+            del lwa_params[CONF_CLIENT_SECRET]
+        return await super()._async_request_new_token(lwa_params)
+
+    async def async_init_device_auth(self) -> CodeAuthResult | None:
         """Do authentication with an Device Authorization code."""
         lwa_params: dict[str, str] = {
             "response_type": "device_code",
-            "scope": scope,
-            "scope_data": json.dumps(scope_data),
+            "scope": self._scope,
+            "scope_data": json.dumps(self._scope_data),
             CONF_CLIENT_ID: self.client_id,
         }
         _LOGGER.debug(

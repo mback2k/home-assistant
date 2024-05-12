@@ -1,4 +1,5 @@
 """Support for Alexa Voice Service connected Endpoint API."""
+
 from datetime import timedelta
 import json
 import logging
@@ -28,15 +29,11 @@ from homeassistant.components.alexa.entities import (
     DisplayCategory,
     async_get_entities,
 )
+from homeassistant.components.alexa.handlers import HANDLERS
 from homeassistant.components.alexa.smart_home import async_handle_message
-from homeassistant.components.alexa.state_report import AlexaResponse
+from homeassistant.components.alexa.state_report import AlexaDirective, AlexaResponse
 from homeassistant.components.cloud.alexa_config import CLOUD_ALEXA
-from homeassistant.components.homeassistant.exposed_entities import (
-    async_expose_entity,
-    async_get_assistant_settings,
-    async_listen_entity_updates,
-    async_should_expose,
-)
+from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CLOUD_NEVER_EXPOSED_ENTITIES,
@@ -45,7 +42,8 @@ from homeassistant.const import (
     STATE_ON,
     __version__,
 )
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State, callback
+from homeassistant.core import Context, HomeAssistant, State, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entityfilter import EntityFilter
 from homeassistant.helpers.event import (
     async_track_state_change,
@@ -61,14 +59,14 @@ import homeassistant.util.dt as dt_util
 
 from .auth import CodeAuth, CodeAuthResult
 from .const import (
+    AVS_VERSION,
     CONF_DEVICE_SERIAL_NUMBER,
+    CONF_ENDPOINT,
     CONF_ENTITY_CONFIG,
     CONF_FILTER,
     CONF_LOCALE,
     CONF_PRODUCT_ID,
-    DEFAULT_AVS_ENDPOINT,
-    DEFAULT_AVS_SCOPE,
-    DEFAULT_AVS_VERSION,
+    CONFIG,
     DOMAIN,
 )
 
@@ -91,20 +89,16 @@ class AlexaEndpointConfig(AbstractConfig):
         super().__init__(hass)
         self._entry: ConfigEntry = entry
         self._config: ConfigType = entry.data
-        self._auth: CodeAuth = CodeAuth(hass, self._config[CONF_CLIENT_ID], None)
+        self._auth: CodeAuth = CodeAuth(
+            hass,
+            self._config[CONF_CLIENT_ID],
+            self._config[CONF_PRODUCT_ID],
+            self._config[CONF_DEVICE_SERIAL_NUMBER],
+        )
         self._async_client = create_async_httpx_client(hass, http2=True)
         self._checker: SignificantlyChangedChecker | None = None
-        self._endpoint = DEFAULT_AVS_ENDPOINT
-        self._version = DEFAULT_AVS_VERSION
-        self._scope = DEFAULT_AVS_SCOPE
-        self._scope_data = {
-            self._scope: {
-                "productID": self._config[CONF_PRODUCT_ID],
-                "productInstanceAttributes": {
-                    "deviceSerialNumber": self._config[CONF_DEVICE_SERIAL_NUMBER],
-                },
-            },
-        }
+        self._endpoint = self._config[CONF_ENDPOINT]
+        self._version = AVS_VERSION
 
     @property
     def supports_auth(self) -> bool:
@@ -119,12 +113,12 @@ class AlexaEndpointConfig(AbstractConfig):
     @property
     def endpoint(self) -> str | URL | None:
         """Endpoint for report state."""
-        return "/".join([self._endpoint, self._version, "events"])
+        return f"{self._endpoint}/{self._version}/events"
 
     @property
     def entity_config(self) -> dict[str, Any]:
         """Return entity config."""
-        return self.hass.data[DOMAIN].get(CONF_ENTITY_CONFIG) or {}
+        return self.hass.data[DOMAIN][CONFIG].get(CONF_ENTITY_CONFIG) or {}
 
     @property
     def locale(self) -> str | None:
@@ -134,16 +128,12 @@ class AlexaEndpointConfig(AbstractConfig):
     @callback
     def user_identifier(self) -> str:
         """EndpointId for connected endpoint."""
-        return "{}::{}::{}".format(
-            self._config[CONF_CLIENT_ID],
-            self._config[CONF_PRODUCT_ID],
-            self._config[CONF_DEVICE_SERIAL_NUMBER],
-        )
+        return self._auth.unique_id()
 
     @callback
     def should_expose(self, entity_id: str) -> bool:
         """If an entity should be exposed."""
-        entity_filter: EntityFilter = self.hass.data[DOMAIN][CONF_FILTER]
+        entity_filter: EntityFilter = self.hass.data[DOMAIN][CONFIG][CONF_FILTER]
         if not entity_filter.empty_filter:
             if entity_id in CLOUD_NEVER_EXPOSED_ENTITIES:
                 return False
@@ -176,7 +166,12 @@ class AlexaEndpointConfig(AbstractConfig):
 
         self._checker = await create_checker(self.hass, DOMAIN, extra_significant_check)
 
-        await self.async_device_verify_gateway()
+        try:
+            await self.async_device_verify_gateway()
+        except httpx.HTTPStatusError as ex:
+            raise ConfigEntryAuthFailed(
+                f"Credentials expired for {self.user_identifier()}"
+            ) from ex
 
         cancel_ping = async_track_time_interval(
             self.hass,
@@ -195,6 +190,11 @@ class AlexaEndpointConfig(AbstractConfig):
         await self.async_device_add_or_update_report()
 
     @callback
+    def async_invalidate_refresh_token(self) -> None:
+        """Invalidate refresh token."""
+        self._auth.async_invalidate_refresh_token()
+
+    @callback
     def async_invalidate_access_token(self) -> None:
         """Invalidate access token."""
         self._auth.async_invalidate_access_token()
@@ -205,7 +205,7 @@ class AlexaEndpointConfig(AbstractConfig):
 
     async def async_init_device_auth(self) -> CodeAuthResult | None:
         """Initialize device authentication."""
-        return await self._auth.async_init_device_auth(self._scope, self._scope_data)
+        return await self._auth.async_init_device_auth()
 
     async def async_wait_device_auth(self, result: CodeAuthResult) -> str | None:
         """Wait for device authentication."""
@@ -214,8 +214,9 @@ class AlexaEndpointConfig(AbstractConfig):
     def _stream_reader_from_response(
         self, response: httpx.Response
     ) -> aiohttp.StreamReader:
-        protocol = BaseProtocol(self.hass.loop)
-        reader = aiohttp.StreamReader(protocol, limit=2**16, loop=self.hass.loop)
+        reader = aiohttp.StreamReader(
+            BaseProtocol(self.hass.loop), limit=2**16, loop=self.hass.loop
+        )
         self._entry.async_create_background_task(
             self.hass,
             _async_feed_stream_reader(response, reader),
@@ -224,134 +225,150 @@ class AlexaEndpointConfig(AbstractConfig):
         return reader
 
     async def _async_handle_response(self, response: httpx.Response) -> None:
-        if response.is_error:
-            await response.aread()
-            _LOGGER.error("Response Error: %s", response.text)
+        content_type = response.headers.get(aiohttp.hdrs.CONTENT_TYPE)
+        if content_type is None and response.status_code == httpx.codes.NO_CONTENT:
             return
 
-        _LOGGER.warning("Response URL: %s", response.request.url)
-        _LOGGER.warning("Response Status: %s", response.status_code)
+        mime_type = aiohttp.multipart.parse_mimetype(content_type)
+        if mime_type.type == "multipart":
+            reader = aiohttp.MultipartReader(
+                response.headers, self._stream_reader_from_response(response)
+            )
+            async for part in reader:
+                if isinstance(part, aiohttp.BodyPartReader):
+                    await self._async_handle_response_part(part)
+                else:
+                    _LOGGER.warning(
+                        "Unsupported response multi-part type: %s", type(part)
+                    )
+        elif mime_type.type == "application":
+            if mime_type.subtype == "json":
+                _LOGGER.debug("Skipping informative JSON data response part.")
+            elif mime_type.subtype == "octet-stream":
+                _LOGGER.debug("Skipping unsupported audio stream response part.")
+        else:
+            _LOGGER.warning("Unsupported response content type: %s", content_type)
 
-        mimetype = aiohttp.multipart.parse_mimetype(
-            response.headers.get(aiohttp.hdrs.CONTENT_TYPE)
-        )
-        if mimetype.type != "multipart":
-            return
+    async def _async_handle_response_part(self, part: aiohttp.BodyPartReader) -> None:
+        # Workaround for BodyPartReader awaiting at least two chunks
+        part.chunk_size = 128
+        directive = await part.json()
 
-        reader = aiohttp.MultipartReader(
-            response.headers, self._stream_reader_from_response(response)
-        )
-        async for part in reader:
-            if not isinstance(part, aiohttp.BodyPartReader):
-                continue
-
-            # Workaround for BodyPartReader awaiting at least two chunks
-            part.chunk_size = 128
-            directive = await part.json()
-            _LOGGER.warning("Directive: %s", directive)
-
-            if "payloadVersion" not in directive[API_DIRECTIVE][API_HEADER]:
-                directive[API_DIRECTIVE][API_HEADER]["payloadVersion"] = "3"
-
-            if API_ENDPOINT in directive[API_DIRECTIVE]:
-                endpoint_prefix = f"{self.user_identifier()}-"
-                endpoint_id = directive[API_DIRECTIVE][API_ENDPOINT]["endpointId"]
-                if endpoint_id.startswith(endpoint_prefix):
-                    directive[API_DIRECTIVE][API_ENDPOINT][
-                        "endpointId"
-                    ] = endpoint_id.removeprefix(endpoint_prefix)
-
-            if _LOGGER.isEnabledFor(logging.DEBUG):
-                _LOGGER.debug(
-                    "Received Alexa Smart Home request: %s",
-                    async_redact_auth_data(directive),
-                )
-
-            response = await async_handle_message(
-                self.hass,
-                self,
-                directive,
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "Received Alexa Smart Home request via AVS: %s",
+                async_redact_auth_data(directive),
             )
 
-            if API_ENDPOINT in response[API_EVENT]:
-                endpoint_id = response[API_EVENT][API_ENDPOINT]["endpointId"]
-                response[API_EVENT][API_ENDPOINT][
-                    "endpointId"
-                ] = f"{self.user_identifier()}-{endpoint_id}"
+        # Assume payloadVersion 3 as default if missing from directive
+        if "payloadVersion" not in directive[API_DIRECTIVE][API_HEADER]:
+            directive[API_DIRECTIVE][API_HEADER]["payloadVersion"] = "3"
 
-            _LOGGER.warning("Response: %s", response)
+        # Remove AVS-specific prefix from endpointId
+        if API_ENDPOINT in directive[API_DIRECTIVE]:
+            endpoint_prefix = f"{self.user_identifier()}-"
+            endpoint_id = directive[API_DIRECTIVE][API_ENDPOINT]["endpointId"]
+            if endpoint_id.startswith(endpoint_prefix):
+                directive[API_DIRECTIVE][API_ENDPOINT]["endpointId"] = (
+                    endpoint_id.removeprefix(endpoint_prefix)
+                )
 
-            if "correlationToken" in response[API_EVENT][API_HEADER]:
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    _LOGGER.debug(
-                        "Sending Alexa Smart Home response: %s",
-                        async_redact_auth_data(response),
-                    )
-                await self.async_device_event(response)
-
-    async def async_post_message(
-        self, headers: dict[str, Any], message_serialized: dict[str, Any]
-    ) -> httpx.Response:
-        _LOGGER.warning("Message: %s", message_serialized)
-        response = await self._async_client.post(
-            url="/".join([self._endpoint, self._version, "events"]),
-            headers=headers,
-            files={"metadata": json.dumps(message_serialized)},
+        # Forward directive to standard Alexa handlers
+        response = await async_handle_message(
+            self.hass,
+            self,
+            directive,
         )
-        _LOGGER.warning("Response: %s", response.text)
-        return response
+
+        # Re-add AVS-specific prefix onto endpointId
+        if API_ENDPOINT in response[API_EVENT]:
+            endpoint_id = response[API_EVENT][API_ENDPOINT]["endpointId"]
+            response[API_EVENT][API_ENDPOINT]["endpointId"] = (
+                f"{self.user_identifier()}-{endpoint_id}"
+            )
+
+        # Only send "response" back to AVS if correlationToken present
+        if "correlationToken" in response[API_EVENT][API_HEADER]:
+            await self.async_device_event(response)
 
     async def async_device_event(self, message: AlexaResponse | dict[str, Any]) -> None:
+        """Send event (message or skill response) to Alexa Voice Service."""
         access_token = await self.async_get_access_token()
         headers: dict[str, Any] = {"Authorization": f"Bearer {access_token}"}
         if isinstance(message, AlexaResponse):
             message_serialized = message.serialize()
         else:
             message_serialized = message
-        _LOGGER.warning("Event: %s", message_serialized)
+
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "Sending Alexa Smart Home response via AVS: %s",
+                async_redact_auth_data(message_serialized),
+            )
+
         async with self._async_client.stream(
             method="POST",
-            url="/".join([self._endpoint, self._version, "events"]),
+            url=f"{self._endpoint}/{self._version}/events",
             headers=headers,
             files={"metadata": json.dumps(message_serialized)},
         ) as response:
-            return await self._async_handle_response(response)
+            if response.status_code == httpx.codes.FORBIDDEN:
+                self.async_invalidate_access_token()
+                self.async_invalidate_refresh_token()
+            response.raise_for_status()
+            await self._async_handle_response(response)
 
     async def async_device_downchannel(self) -> None:
-        no_read_timeout = httpx.Timeout(10.0, read=60.0 * 60.0)
+        """Receive directives from Alexa Voice Service via open channel."""
+        hour_read_timeout = httpx.Timeout(10.0, read=60.0 * 60.0)
         access_token = await self.async_get_access_token()
         headers: dict[str, Any] = {"Authorization": f"Bearer {access_token}"}
+
         try:
-            _LOGGER.warning("downchannel start")
             async with self._async_client.stream(
                 method="GET",
-                url="/".join([self._endpoint, self._version, "directives"]),
+                url=f"{self._endpoint}/{self._version}/directives",
                 headers=headers,
-                timeout=no_read_timeout,
+                timeout=hour_read_timeout,
             ) as response:
-                _LOGGER.warning("downchannel await")
-                return await self._async_handle_response(response)
-        except httpx.RemoteProtocolError:
-            _LOGGER.warning("downchannel restart")
+                if response.status_code == httpx.codes.FORBIDDEN:
+                    self.async_invalidate_access_token()
+                    self.async_invalidate_refresh_token()
+                response.raise_for_status()
+                await self._async_handle_response(response)
+        except httpx.TransportError:
             self._entry.async_create_background_task(
                 self.hass,
                 self.async_device_downchannel(),
                 name=self.user_identifier(),
             )
 
-    async def async_device_ping(self, now: Any = None) -> None:
+    async def async_device_ping(self, now: Any = None) -> httpx.Response:
+        """Send ping request to Alexa Voice Service to keep endpoint active."""
         access_token = await self.async_get_access_token()
         headers: dict[str, Any] = {"Authorization": f"Bearer {access_token}"}
-        return await self._async_client.get(
-            url="/".join([self._endpoint, self._version, "ping"]),
+        response = await self._async_client.get(
+            url=f"{self._endpoint}/ping",
             headers=headers,
         )
+        if response.status_code == httpx.codes.FORBIDDEN:
+            self.async_invalidate_access_token()
+            self.async_invalidate_refresh_token()
+        return response.raise_for_status()
 
-    async def async_device_verify_gateway(self) -> httpx.Response:
+    async def async_device_verify_gateway(self) -> None:
+        """Send VerifyGateway event to Alexa Voice Service.
+
+        https://developer.amazon.com/docs/alexa/alexa-voice-service/alexa-apigateway.html#verifygateway
+        """
         message = AlexaResponse(name="VerifyGateway", namespace="Alexa.ApiGateway")
         return await self.async_device_event(message)
 
-    async def async_device_synchronize_state(self) -> httpx.Response:
+    async def async_device_synchronize_state(self) -> None:
+        """Send SynchronizeState event to Alexa Voice Service.
+
+        https://developer.amazon.com/docs/alexa/alexa-voice-service/system.html#synchronizestate
+        """
         message = AlexaResponse(name="SynchronizeState", namespace="System")
         return await self.async_device_event(message)
 
@@ -373,6 +390,7 @@ class AlexaEndpointConfig(AbstractConfig):
         old_state: State | None,
         new_state: State | None,
     ) -> None:
+        """React upon entity changes to emit events to Alexa Voice Service."""
         if not self.hass.is_running:
             return
 
@@ -426,7 +444,7 @@ class AlexaEndpointConfig(AbstractConfig):
         )
 
     def serialize_discovery(self) -> dict[str, Any]:
-        """Serialize the entity for discovery."""
+        """Serialize the Alexa endpoint itself for discovery."""
         endpointId = self.user_identifier()
         result: dict[str, Any] = {
             "displayCategories": [DisplayCategory.HUB],
@@ -491,7 +509,6 @@ class AlexaEndpointConfig(AbstractConfig):
             if not self.should_expose(alexa_entity.entity_id):
                 continue
             endpoints.append(alexa_entity.serialize_discovery())
-        _LOGGER.warning("Endpoints: %s", endpoints)
 
         payload: dict[str, Any] = {
             "endpoints": endpoints,
@@ -565,3 +582,15 @@ class AlexaEndpointConfig(AbstractConfig):
         )
         message.set_endpoint_full(access_token, alexa_entity.alexa_id())
         return await self.async_device_event(message)
+
+
+@HANDLERS.register(("Alexa.ApiGateway", "SetGateway"))
+async def async_api_gateway_setgateway(
+    hass: HomeAssistant,
+    config: AbstractConfig,
+    directive: AlexaDirective,
+    context: Context,
+) -> AlexaResponse:
+    """Process a SetGateway request."""
+    config._endpoint = directive.payload["gateway"]
+    return directive.response()

@@ -9,7 +9,8 @@
           "client_id": "Client ID",
           "product_id": "Product ID",
           "device_serial_number": "Device Serial Number",
-          "locale": "Locale"
+          "locale": "Locale",
+          "endpoint": "Endpoint Connection Region"
         }
       },
       "code": {
@@ -21,19 +22,15 @@
         "data_description": {
           "code": "Copy this code before continueing!"
         }
+      },
+      "reauth_confirm": {
+        "title": "[%key:common::config_flow::title::reauth%]",
+        "description": "The Alexa Endpoint integration needs to re-authenticate your account."
       }
     },
-    "error": {
-      "register_failed": "Failed to register, please try again",
-      "linking": "Unknown linking error occurred."
-    },
     "abort": {
-      "discover_timeout": "Unable to discover Hue bridges",
-      "no_bridges": "No Philips Hue bridges discovered",
-      "all_configured": "All Philips Hue bridges are already configured",
-      "unknown": "Unknown error occurred",
-      "cannot_connect": "Unable to connect to the bridge",
-      "already_configured": "Bridge is already configured"
+      "already_configured": "Alexa Endpoint is already configured",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
     }
   }
 }
