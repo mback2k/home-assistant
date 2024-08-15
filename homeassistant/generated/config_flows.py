@@ -652,6 +652,7 @@ FLOWS = {
         "withings",
         "wiz",
         "wled",
+        "wmspro",
         "wolflink",
         "workday",
         "worldclock",
