@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
+import asyncio
 
 from wmspro.const import (
     WMS_WebControl_pro_API_actionDescription,
@@ -27,7 +28,7 @@ from homeassistant.util.percentage import (
 from . import WebControlProConfigEntry
 from .entity import WebControlProGenericEntity
 
-SCAN_INTERVAL = timedelta(seconds=10)
+SCAN_INTERVAL = timedelta(seconds=2)
 PARALLEL_UPDATES = 1
 
 
@@ -84,6 +85,11 @@ class WebControlProCover(WebControlProGenericEntity, CoverEntity):
     def is_closed(self) -> bool | None:
         """Return if the cover is closed."""
         return self.current_cover_position == 0
+    
+    @property
+    def is_opened(self) -> bool | None:
+        """Return if the cover is opened."""
+        return self.current_cover_position == 100
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
@@ -142,44 +148,59 @@ class WebControlProSlatDriveRotate(WebControlProSlatDrive):
 
     _tilt_action_desc = WMS_WebControl_pro_API_actionDescription.SlatRotate
     _tilt_action_attr = "rotation"
-
+    _tilt_minValue = -75
+    _tilt_maxValue = 75
+    _tilt_waitingTime = 1.5
+    
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Move the cover to a specific position and optionally set the cover tilt."""
+        if super().is_opened and kwargs[ATTR_POSITION] < 100:
+            await self.async_close_cover_tilt(**kwargs)
+            await asyncio.sleep(self._tilt_waitingTime)
+        elif kwargs[ATTR_POSITION] == 100:
+            await self.async_open_cover_tilt(**kwargs)
+            await asyncio.sleep(self._tilt_waitingTime)
+        await super().async_set_cover_position(**kwargs)
+    
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover and tilt like the hub."""
-        await super().async_open_cover(**kwargs)
         await self.async_open_cover_tilt(**kwargs)
-
+        await asyncio.sleep(self._tilt_waitingTime)
+        await super().async_open_cover(**kwargs)
+    
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover and tilt like the hub."""
-        await super().async_close_cover(**kwargs)
         await self.async_close_cover_tilt(**kwargs)
+        await asyncio.sleep(self._tilt_waitingTime)
+        await super().async_close_cover(**kwargs)
 
     @property
     def current_cover_tilt_position(self) -> int | None:
         """Return current position of cover tilt."""
         action = self._dest.action(self._tilt_action_desc)
         return ranged_value_to_percentage(
-            (action.minValue, action.maxValue),
+            (self._tilt_minValue, self._tilt_maxValue),
             action[self._tilt_action_attr],
         )
-
+    
     async def async_set_cover_tilt_position(self, **kwargs: Any) -> None:
         """Set the cover tilt position."""
         action = self._dest.action(self._tilt_action_desc)
         rotation = percentage_to_ranged_value(
-            (action.minValue, action.maxValue),
+            (self._tilt_minValue, self._tilt_maxValue),
             kwargs[ATTR_TILT_POSITION],
         )
         kwargs = {self._tilt_action_attr: rotation}
         await action(**kwargs)
 
     async def async_open_cover_tilt(self, **kwargs: Any) -> None:
-        """Open the cover tilt."""
+        """Open the cover tilt. When parked open, set tilt to parking position (horizontal)."""
         action = self._dest.action(self._tilt_action_desc)
-        kwargs = {self._tilt_action_attr: action.maxValue}
+        kwargs = {self._tilt_action_attr: self._tilt_minValue}
         await action(**kwargs)
 
     async def async_close_cover_tilt(self, **kwargs: Any) -> None:
-        """Close the cover tilt."""
+        """Close the cover tilt. When fully closed, set tilt to close position (vertical)."""
         action = self._dest.action(self._tilt_action_desc)
-        kwargs = {self._tilt_action_attr: action.minValue}
+        kwargs = {self._tilt_action_attr: self._tilt_maxValue}
         await action(**kwargs)
