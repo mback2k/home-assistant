@@ -28,7 +28,7 @@ from homeassistant.util.percentage import (
 from . import WebControlProConfigEntry
 from .entity import WebControlProGenericEntity
 
-SCAN_INTERVAL = timedelta(seconds=2)
+SCAN_INTERVAL = timedelta(seconds=1)
 PARALLEL_UPDATES = 1
 
 
@@ -148,16 +148,40 @@ class WebControlProSlatDriveRotate(WebControlProSlatDrive):
 
     _tilt_action_desc = WMS_WebControl_pro_API_actionDescription.SlatRotate
     _tilt_action_attr = "rotation"
+
+    # TODO: if Warema ever fixes the API to provide correct min/max values, use those
+    # _tilt_minValue = action.minValue
+    # _tilt_maxValue = action.maxValue
+    # Using hardcoded values for now
     _tilt_minValue = -75
     _tilt_maxValue = 75
-    _tilt_waitingTime = 1.5
     
+    # When sending single commands to the cover, a newly sent command aborts
+    # the previous command. So as a workaround, we need first tilt, wait a bit,
+    # then move the cover as tilting is the faster action.
+    # The WMS WebControl Pro hub is capable to handle both commands at once,
+    # but this needs to be implemented in the pywmspro library first. When that
+    # is done, this workaround can be removed.
+    # The workaround is implemented in the async_set_cover_position,
+    # async_open_cover and async_close_cover methods below.
+
+    # Time to wait after tilting before moving the cover (needed for the workaround)
+    _tilt_waitingTime = 1.5
+
+    # TODO: replace workaround with proper simultaneous command handling when
+    # supported in pywmspro.
+
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position and optionally set the cover tilt."""
         if super().is_opened and kwargs[ATTR_POSITION] < 100:
+            # When the cover is moved from fully open, then fully close the tilt first, as this
+            # is a nicer visual effect and probably expected by the user.
             await self.async_close_cover_tilt(**kwargs)
             await asyncio.sleep(self._tilt_waitingTime)
         elif kwargs[ATTR_POSITION] == 100:
+            # When the cover is moved to fully open, then fully open the tilt first, as this
+            # is also the parking position. Without this, the cover cannot fully enter its
+            # parking position.
             await self.async_open_cover_tilt(**kwargs)
             await asyncio.sleep(self._tilt_waitingTime)
         await super().async_set_cover_position(**kwargs)
@@ -178,9 +202,14 @@ class WebControlProSlatDriveRotate(WebControlProSlatDrive):
     def current_cover_tilt_position(self) -> int | None:
         """Return current position of cover tilt."""
         action = self._dest.action(self._tilt_action_desc)
+        current_rotation_value = action[self._tilt_action_attr]
+        if current_rotation_value is None:
+             # If no tilt value is available, assume fully open (horizontal).
+             # This is to prevent error logs in home assistant.
+             current_rotation_value = self._tilt_minValue
         return ranged_value_to_percentage(
             (self._tilt_minValue, self._tilt_maxValue),
-            action[self._tilt_action_attr],
+            current_rotation_value,
         )
     
     async def async_set_cover_tilt_position(self, **kwargs: Any) -> None:
