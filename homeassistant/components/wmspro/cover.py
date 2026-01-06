@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
-import asyncio
 
 from wmspro.const import (
     WMS_WebControl_pro_API_actionDescription as ACTION_DESC,
