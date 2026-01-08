@@ -28,7 +28,7 @@ from homeassistant.util.percentage import (
 from . import WebControlProConfigEntry
 from .entity import WebControlProGenericEntity
 
-SCAN_INTERVAL = timedelta(seconds=1)
+SCAN_INTERVAL = timedelta(seconds=10)
 PARALLEL_UPDATES = 1
 
 
@@ -68,15 +68,14 @@ class WebControlProCover(WebControlProGenericEntity, CoverEntity):
     def current_cover_position(self) -> int | None:
         """Return current position of cover."""
         action = self._dest.action(self._drive_action_desc)
-        if action is None or action[self._drive_action_attr] is None:
+        if action is None or action["percentage"] is None:
             return None
-        return 100 - action[self._drive_action_attr]
+        return 100 - action["percentage"]
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position."""
         action = self._dest.action(self._drive_action_desc)
-        kwargs = {self._drive_action_attr: 100 - kwargs[ATTR_POSITION]}
-        await action(**kwargs)
+        await action(percentage=100 - kwargs[ATTR_POSITION])
 
     @property
     def is_closed(self) -> bool | None:
@@ -91,14 +90,12 @@ class WebControlProCover(WebControlProGenericEntity, CoverEntity):
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
         action = self._dest.action(self._drive_action_desc)
-        kwargs = {self._drive_action_attr: 0}
-        await action(**kwargs)
+        await action(percentage=0)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
         action = self._dest.action(self._drive_action_desc)
-        kwargs = {self._drive_action_attr: 100}
-        await action(**kwargs)
+        await action(percentage=100)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the device if in motion."""
