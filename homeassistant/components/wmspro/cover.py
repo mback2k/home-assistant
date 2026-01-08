@@ -153,7 +153,7 @@ class WebControlProSlatRotate(WebControlProSlat):
         action_drive = self._dest.action(self._drive_action_desc)
         action_list = action_drive.prep(percentage=0)
         action_tilt = self._dest.action(self._tilt_action_desc)
-        action_list += action_tilt.prep(rotation=_tilt_minValue)
+        action_list += action_tilt.prep(rotation=self._tilt_minValue)
         await action_list()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
@@ -161,7 +161,7 @@ class WebControlProSlatRotate(WebControlProSlat):
         action_drive = self._dest.action(self._drive_action_desc)
         action_list = action_drive.prep(percentage=100)
         action_tilt = self._dest.action(self._tilt_action_desc)
-        action_list += action_tilt.prep(rotation=_tilt_maxValue)
+        action_list += action_tilt.prep(rotation=self._tilt_maxValue)
         await action_list()
 
     @property
@@ -169,7 +169,7 @@ class WebControlProSlatRotate(WebControlProSlat):
         """Return current position of cover tilt."""
         action = self._dest.action(self._tilt_action_desc)
         return ranged_value_to_percentage(
-            (_tilt_minValue, _tilt_maxValue),
+            (self._tilt_minValue, self._tilt_maxValue),
             action["rotation"],
         )
 
@@ -177,7 +177,7 @@ class WebControlProSlatRotate(WebControlProSlat):
         """Set the cover tilt position."""
         action = self._dest.action(self._tilt_action_desc)
         rotation = percentage_to_ranged_value(
-            (_tilt_minValue, _tilt_maxValue),
+            (self._tilt_minValue, self._tilt_maxValue),
             kwargs[ATTR_TILT_POSITION],
         )
         await action(rotation=rotation)
@@ -185,9 +185,9 @@ class WebControlProSlatRotate(WebControlProSlat):
     async def async_open_cover_tilt(self, **kwargs: Any) -> None:
         """Open the cover tilt."""
         action = self._dest.action(self._tilt_action_desc)
-        await action(rotation=_tilt_maxValue)
+        await action(rotation=self._tilt_maxValue)
 
     async def async_close_cover_tilt(self, **kwargs: Any) -> None:
         """Close the cover tilt."""
         action = self._dest.action(self._tilt_action_desc)
-        await action(rotation=_tilt_minValue)
+        await action(rotation=self._tilt_minValue)
