@@ -81,11 +81,6 @@ class WebControlProCover(WebControlProGenericEntity, CoverEntity):
     def is_closed(self) -> bool | None:
         """Return if the cover is closed."""
         return self.current_cover_position == 0
-    
-    @property
-    def is_opened(self) -> bool | None:
-        """Return if the cover is opened."""
-        return self.current_cover_position == 100
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
