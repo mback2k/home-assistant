@@ -21,5 +21,20 @@
         }
       }
     }
+  },
+  "entity": {
+    "cover": {
+      "valance": {
+        "name": "Valance"
+      }
+    },
+    "number": {
+      "position": {
+        "name": "Position"
+      },
+      "tilt": {
+        "name": "Tilt"
+      }
+    }
   }
 }

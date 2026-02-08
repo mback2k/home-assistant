@@ -45,7 +45,9 @@ class WebControlProSwitch(WebControlProGenericEntity, SwitchEntity):
     def is_on(self) -> bool:
         """Return true if switch is on."""
         action = self._dest.action(WMS_WebControl_pro_API_actionDescription.LoadSwitch)
-        return action["onOffState"]
+        if action is None:
+            return False
+        return action.get("onOffState", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""

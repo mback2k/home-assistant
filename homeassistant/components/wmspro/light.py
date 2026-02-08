@@ -52,7 +52,9 @@ class WebControlProLight(WebControlProGenericEntity, LightEntity):
     def is_on(self) -> bool:
         """Return true if light is on."""
         action = self._dest.action(WMS_WebControl_pro_API_actionDescription.LightSwitch)
-        return action["onOffState"]
+        if action is None:
+            return False
+        return action.get("onOffState", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""
@@ -81,7 +83,11 @@ class WebControlProDimmer(WebControlProLight):
         action = self._dest.action(
             WMS_WebControl_pro_API_actionDescription.LightDimming
         )
-        return value_to_brightness(BRIGHTNESS_SCALE, action["percentage"])
+        if action is None:
+            return 0
+        
+        percentage = action.get("percentage", 0)
+        return value_to_brightness(BRIGHTNESS_SCALE, percentage)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the dimmer on."""

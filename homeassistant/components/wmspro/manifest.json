@@ -1,6 +1,7 @@
 {
   "domain": "wmspro",
   "name": "WMS WebControl pro",
+  "version": "99.99.97-custom-slatupdate",
   "codeowners": ["@mback2k"],
   "config_flow": true,
   "dhcp": [
