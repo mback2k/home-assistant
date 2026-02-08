@@ -1,0 +1,43 @@
+feat: Comprehensive WMS WebControl pro API integration enhancements
+
+Implement complete device status monitoring, improved cover control, and enhanced logging across all platforms.
+
+Core Features:
+- Heartbeat error detection: Entities automatically become unavailable when device connection is lost
+- Device block status monitoring: Shows when device is blocked or not responding (e.g., offline weather station)  
+- Driving cause attribute: Human-readable explanation of last device movement trigger
+  (Sun, Wind, Rain, Temperature, Manual, Scene, Safety, Contact, Central Command, etc.)
+- Full tilt support for jalousies with SlatRotate action (rotation -75 to +75 degrees)
+- Dynamic hardware limit reading from device configuration
+
+Cover Improvements:
+- Separate device classes: WebControlProJalousie (position + tilt) vs WebControlProRollerShutter (position only)
+- Complete Home Assistant cover API compliance: open, close, stop, set_position, 
+  open_tilt, close_tilt, stop_tilt, set_tilt_position
+- Proper supported_features setup for each device type
+- ResponseType.Detailed for all cover actions
+- Robust position/tilt conversion with proper error handling
+
+Enhanced Logging:
+- INFO level logging for all cover operations with parameters and results
+- Detailed error reporting for failed actions
+- Device availability and status monitoring logs
+
+Other Platform Improvements:
+- Light and Switch: Safe property access with .get() method
+- Config Flow: Fixed KeyError with safe host key access
+- Light: Brightness property safe access pattern
+- Diagnostics: DrivingCause mapping integrated into diagnostics
+
+Removed:
+- Number entities (redundant with working cover.set_cover_position/set_cover_tilt_position services)
+
+Testing & Debugging:
+- New check_devices.py utility for device connectivity diagnosis
+- Improved attribute access patterns for both dict and object types
+- Better error messages and edge case handling
+
+API Compliance:
+- Full implementation of WMS API status fields (heartbeatError, blocking, drivingCause, productData)
+- Proper ResponseType.Detailed usage across all platforms
+- Safe handling for missing or incomplete device data

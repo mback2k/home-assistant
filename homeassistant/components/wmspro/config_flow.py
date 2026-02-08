@@ -44,7 +44,9 @@ class WebControlProConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         if entry:
             try:  # Check if current host is a valid IP address
-                ipaddress.ip_address(entry.data[CONF_HOST])
+                host = entry.data.get(CONF_HOST)
+                if host:
+                    ipaddress.ip_address(host)
             except ValueError:  # Do not touch name-based host
                 return self.async_abort(reason="already_configured")
             else:  # Update existing host with new IP address
