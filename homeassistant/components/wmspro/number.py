@@ -44,6 +44,7 @@ class WebControlProSlatRange(WebControlProGenericEntity, RestoreNumber):
     """Representation of a WMS based range-option for a slat-based cover."""
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_name = None
 
     def __init__(self, config_entry_id: str, dest: Destination, func: Callable) -> None:
         """Initialize the entity with destination channel."""
@@ -125,6 +126,7 @@ class WebControlProSlatRotation(WebControlProGenericEntity, NumberEntity):
     """Representation of a WMS based slat-rotation for a slat-based cover."""
 
     _attr_icon = "mdi:rotate-360"
+    _attr_name = None
     _attr_translation_key = "slat_rotation"
 
     def __init__(self, config_entry_id: str, dest: Destination) -> None:
