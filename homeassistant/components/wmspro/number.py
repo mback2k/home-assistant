@@ -44,19 +44,20 @@ class WebControlProSlatRange(WebControlProGenericEntity, RestoreNumber):
     """Representation of a WMS based range-option for a slat-based cover."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_name = None
+    _attr_has_entity_name = False
 
     def __init__(self, config_entry_id: str, dest: Destination, func: Callable) -> None:
         """Initialize the entity with destination channel."""
         super().__init__(config_entry_id, dest)
         self._value_func = func
-        self._attr_translation_key = f"slat_rotation_{func.__name__}"
+        if func == min:
+            self._attr_name = f"{dest.name} Min Tilt"
+            self._attr_icon = "mdi:rotate-left"
+        elif func == max:
+            self._attr_name = f"{dest.name} Max Tilt"
+            self._attr_icon = "mdi:rotate-right"
         if self._attr_unique_id:
             self._attr_unique_id += f"-slat-rotation-{func.__name__}"
-        if self._value_func == min:
-            self._attr_icon = "mdi:rotate-left"
-        elif self._value_func == max:
-            self._attr_icon = "mdi:rotate-right"
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -126,24 +127,48 @@ class WebControlProSlatRotation(WebControlProGenericEntity, NumberEntity):
     """Representation of a WMS based slat-rotation for a slat-based cover."""
 
     _attr_icon = "mdi:rotate-360"
-    _attr_name = None
-    _attr_translation_key = "slat_rotation"
+    _attr_has_entity_name = False
 
     def __init__(self, config_entry_id: str, dest: Destination) -> None:
         """Initialize the entity with destination channel."""
         super().__init__(config_entry_id, dest)
+        self._attr_name = f"{dest.name} Tilt"
         if self._attr_unique_id:
             self._attr_unique_id += "-slat-rotation"
 
     @property
     def native_min_value(self) -> float:
-        """Return the minimum value."""
+        """Return the configured minimum value."""
+        # Try to get configured min value from config entity
+        if self._config_entry_id and self._attr_unique_id:
+            domain_data = self.hass.data.get(DOMAIN)
+            if isinstance(domain_data, dict):
+                config_entry_data = domain_data.get(self._config_entry_id)
+                if isinstance(config_entry_data, dict):
+                    min_entity_id = f"{self._dest.id}-slat-rotation-min"
+                    min_entity = config_entry_data.get(min_entity_id)
+                    if hasattr(min_entity, '_attr_native_value') and min_entity._attr_native_value is not None:
+                        return min_entity._attr_native_value
+        
+        # Fallback to hardware limit
         action = self._dest.action(ACTION_DESC.SlatRotate)
         return action.minValue
 
     @property
     def native_max_value(self) -> float:
-        """Return the maximum value."""
+        """Return the configured maximum value."""
+        # Try to get configured max value from config entity
+        if self._config_entry_id and self._attr_unique_id:
+            domain_data = self.hass.data.get(DOMAIN)
+            if isinstance(domain_data, dict):
+                config_entry_data = domain_data.get(self._config_entry_id)
+                if isinstance(config_entry_data, dict):
+                    max_entity_id = f"{self._dest.id}-slat-rotation-max"
+                    max_entity = config_entry_data.get(max_entity_id)
+                    if hasattr(max_entity, '_attr_native_value') and max_entity._attr_native_value is not None:
+                        return max_entity._attr_native_value
+        
+        # Fallback to hardware limit
         action = self._dest.action(ACTION_DESC.SlatRotate)
         return action.maxValue
 
