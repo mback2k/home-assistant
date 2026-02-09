@@ -42,14 +42,14 @@
       }
     },
     "number": {
-      "rotation": {
-        "name": "Rotation"
+      "slat_rotation": {
+        "name": "Neigung"
       },
-      "rotation-max": {
-        "name": "Maximum Rotation"
+      "slat_rotation_max": {
+        "name": "Maximale Neigung"
       },
-      "rotation-min": {
-        "name": "Minimum Rotation"
+      "slat_rotation_min": {
+        "name": "Minimale Neigung"
       }
     }
   },
