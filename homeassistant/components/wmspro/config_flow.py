@@ -77,7 +77,7 @@ class WebControlProConfigFlow(ConfigFlow, domain=DOMAIN):
             except aiohttp.ClientError:
                 errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected exception")
+                _LOGGER.exception("Failed to connect to WMS WebControl pro at %s", host)
                 errors["base"] = "unknown"
             else:
                 if not pong:
