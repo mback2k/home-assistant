@@ -147,9 +147,12 @@ class WebControlProSlatRotation(WebControlProGenericEntity, NumberEntity):
                 if isinstance(config_entry_data, dict):
                     min_entity_id = f"{self._dest.id}-slat-rotation-min"
                     min_entity = config_entry_data.get(min_entity_id)
-                    if hasattr(min_entity, '_attr_native_value') and min_entity._attr_native_value is not None:
-                        return min_entity._attr_native_value
-        
+                    if (
+                        hasattr(min_entity, "native_value")
+                        and min_entity.native_value is not None
+                    ):
+                        return min_entity.native_value
+
         # Fallback to hardware limit
         action = self._dest.action(ACTION_DESC.SlatRotate)
         return action.minValue
@@ -165,9 +168,12 @@ class WebControlProSlatRotation(WebControlProGenericEntity, NumberEntity):
                 if isinstance(config_entry_data, dict):
                     max_entity_id = f"{self._dest.id}-slat-rotation-max"
                     max_entity = config_entry_data.get(max_entity_id)
-                    if hasattr(max_entity, '_attr_native_value') and max_entity._attr_native_value is not None:
-                        return max_entity._attr_native_value
-        
+                    if (
+                        hasattr(max_entity, "native_value")
+                        and max_entity.native_value is not None
+                    ):
+                        return max_entity.native_value
+
         # Fallback to hardware limit
         action = self._dest.action(ACTION_DESC.SlatRotate)
         return action.maxValue
