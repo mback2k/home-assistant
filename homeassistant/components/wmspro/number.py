@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import timedelta
 
 from wmspro.const import WMS_WebControl_pro_API_actionDescription as ACTION_DESC
@@ -32,8 +31,8 @@ async def async_setup_entry(
     entities: list[WebControlProGenericEntity] = []
     for d in hub.dests.values():
         if d.hasAction(ACTION_DESC.SlatDrive) and d.hasAction(ACTION_DESC.SlatRotate):
-            entities.append(WebControlProSlatRange(config_entry.entry_id, d, min))
-            entities.append(WebControlProSlatRange(config_entry.entry_id, d, max))
+            entities.append(WebControlProSlatRange(config_entry.entry_id, d, "min"))
+            entities.append(WebControlProSlatRange(config_entry.entry_id, d, "max"))
         if d.hasAction(ACTION_DESC.SlatRotate):
             entities.append(WebControlProSlatRotation(config_entry.entry_id, d))
 
@@ -46,7 +45,7 @@ class WebControlProSlatRange(WebControlProGenericEntity, RestoreNumber):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_has_entity_name = False
 
-    def __init__(self, config_entry_id: str, dest: Destination, func: Callable) -> None:
+    def __init__(self, config_entry_id: str, dest: Destination, name: str) -> None:
         """Initialize the entity with destination channel."""
         super().__init__(config_entry_id, dest)
         self._value_func = func
@@ -98,12 +97,11 @@ class WebControlProSlatRange(WebControlProGenericEntity, RestoreNumber):
 
         # Learn min/max rotation if different from action limits
         action = self._dest.action(ACTION_DESC.SlatRotate)
-        if action is not None:
-            rotation = action["rotation"]
-            if rotation and rotation not in (action.minValue, action.maxValue):
-                self._attr_native_value = self._value_func(
-                    self._attr_native_value, rotation
-                )
+        rotation = action["rotation"]
+        if rotation and rotation not in (action.minValue, action.maxValue):
+            self._attr_native_value = self._value_func(
+                self._attr_native_value, rotation
+            )
 
     @property
     def native_min_value(self) -> float:
