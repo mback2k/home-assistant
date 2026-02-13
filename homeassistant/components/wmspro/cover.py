@@ -104,6 +104,7 @@ class WebControlProAwning(WebControlProCover):
     """Representation of a WMS based awning."""
 
     _attr_device_class = CoverDeviceClass.AWNING
+    _attr_translation_key = "awning"
     _drive_action_desc = ACTION_DESC.AwningDrive
 
 
@@ -125,6 +126,7 @@ class WebControlProRollerShutter(WebControlProCover):
     """Representation of a WMS based roller shutter or blind."""
 
     _attr_device_class = CoverDeviceClass.SHUTTER
+    _attr_translation_key = "roller_shutter"
     _drive_action_desc = ACTION_DESC.RollerShutterBlindDrive
 
 
@@ -132,12 +134,14 @@ class WebControlProSlat(WebControlProCover):
     """Representation of a WMS based blind using a slat drive."""
 
     _attr_device_class = CoverDeviceClass.BLIND
+    _attr_translation_key = "slat"
     _drive_action_desc = ACTION_DESC.SlatDrive
 
 
 class WebControlProSlatRotate(WebControlProSlat):
     """Representation of a WMS based blind which supports tilting."""
 
+    _attr_translation_key = "slat_rotate"
     _tilt_action_desc = ACTION_DESC.SlatRotate
 
     async def async_open_cover(self, **kwargs: Any) -> None:

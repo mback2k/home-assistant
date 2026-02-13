@@ -5,6 +5,7 @@ from __future__ import annotations
 from wmspro.const import WMS_WebControl_pro_API_actionDescription
 
 from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -33,6 +34,7 @@ class WebControlProIdentifyButton(WebControlProGenericEntity, ButtonEntity):
     """Representation of a WMS based identify button."""
 
     _attr_device_class = ButtonDeviceClass.IDENTIFY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     async def async_press(self) -> None:
         """Handle the button press."""

@@ -18,25 +18,57 @@
         },
         "data_description": {
           "host": "The hostname or IP address of your WMS WebControl pro."
-        }
+        },
+        "description": "Richten Sie Ihre WMS WebControl pro Integration ein."
       }
     }
   },
   "entity": {
     "cover": {
+      "awning": {
+        "name": "Markise"
+      },
+      "roller_shutter": {
+        "name": "Rolladen"
+      },
+      "slat": {
+        "name": "Jalousie"
+      },
+      "slat_rotate": {
+        "name": "Jalousie mit Neigung"
+      },
       "valance": {
-        "name": "Valance"
+        "name": "Volant"
       }
     },
     "number": {
-      "rotation": {
-        "name": "Rotation"
+      "slat_rotation": {
+        "name": "Slat rotation"
       },
-      "rotation-max": {
-        "name": "Maximum Rotation"
+      "slat_rotation_max": {
+        "name": "Maximum slat rotation"
       },
-      "rotation-min": {
-        "name": "Minimum Rotation"
+      "slat_rotation_min": {
+        "name": "Minimum slat rotation"
+      }
+    }
+  },
+  "entity_component": {
+    "_": {
+      "name": "WMS WebControl pro",
+      "state": {
+        "cover": {
+          "awning": "Markise",
+          "roller_shutter": "Rolladen",
+          "slat": "Jalousie",
+          "slat_rotate": "Jalousie mit Neigung",
+          "valance": "Volant"
+        },
+        "number": {
+          "slat_rotation": "Neigung",
+          "slat_rotation_max": "Maximale Neigung",
+          "slat_rotation_min": "Minimale Neigung"
+        }
       }
     }
   }
